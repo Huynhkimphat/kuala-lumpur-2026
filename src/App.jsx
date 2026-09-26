@@ -1,430 +1,1697 @@
-import React, { useState } from 'react';
-import { 
-  Plane, Hotel, DollarSign, CheckSquare, MapPin, 
-  CreditCard, Compass, ExternalLink, Calendar, Users, 
-  ShoppingBag, Utensils, AlertCircle, CheckCircle2, Menu, X
+import { useState, useEffect } from 'react';
+import {
+  Train,
+  DollarSign,
+  CheckSquare,
+  MapPin,
+  Navigation,
+  ExternalLink,
+  Calendar,
+  ShoppingBag,
+  AlertCircle,
+  Copy,
+  Check,
+  RotateCcw,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Footprints
 } from 'lucide-react';
+import { tripData } from './data/tripData';
 
 export default function App() {
+  const [lang, setLang] = useState(() => {
+    return localStorage.getItem('kl_planner_lang') || 'vi';
+  });
   const [currentTab, setCurrentTab] = useState('itinerary');
   const [selectedDay, setSelectedDay] = useState(1);
-  const [checklist, setChecklist] = useState([
-    { id: 1, text: "Khai online tờ khai nhập cảnh Malaysia (MDAC) trong vòng 3 ngày trước bay", done: false, tag: "Bắt buộc" },
-    { id: 2, text: "Hộ chiếu (Passport) cả 4 người còn hạn trên 6 tháng tính đến ngày về", done: false, tag: "Bắt buộc" },
-    { id: 3, text: "Đổi sẵn ~1.200 - 1.500 MYR tiền mặt (ưu tiên các tờ 10, 20, 50 MYR lẻ)", done: false, tag: "Tiền mặt" },
-    { id: 4, text: "Chuẩn bị 2-3 củ chuyển đổi chân cắm 3 chấu vuông (Type G - chuẩn UK)", done: false, tag: "Thiết bị" },
-    { id: 5, text: "Cài app Grab & liên kết thẻ ngân hàng quốc tế (Visa/Mastercard) từ Việt Nam", done: false, tag: "Di chuyển" },
-    { id: 6, text: "Cài đặt eSIM hoặc đặt trước SIM 4G nhận tại quầy sân bay KLIA", done: false, tag: "Kết nối" }
-  ]);
+  const [copiedAddress, setCopiedAddress] = useState(false);
+
+  // Track which itinerary nodes have their detailed directions expanded (default: all collapsed {})
+  const [expandedNodes, setExpandedNodes] = useState({});
+
+  // Persistent checklist state (stores array of completed item IDs)
+  const [doneIds, setDoneIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kl_planner_done_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Live MYR <-> VND Converter & Bill Splitter state
+  const [myrAmount, setMyrAmount] = useState('100');
+  const [exchangeRate, setExchangeRate] = useState('5800');
+
+  useEffect(() => {
+    localStorage.setItem('kl_planner_lang', lang);
+  }, [lang]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('kl_planner_done_ids', JSON.stringify(doneIds));
+    } catch {
+      // ignore storage errors
+    }
+  }, [doneIds]);
+
+  const t = tripData[lang];
+
+  const toggleNodeExpand = (day, idx) => {
+    const key = `${day}-${idx}`;
+    setExpandedNodes((prev) => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const currentDayObj =
+    t.itinerarySection.days.find((d) => d.day === selectedDay) ||
+    t.itinerarySection.days[0];
+
+  const areAllCurrentDayExpanded = currentDayObj.nodes.every(
+    (_, idx) => !!expandedNodes[`${selectedDay}-${idx}`]
+  );
+
+  const toggleAllCurrentDay = () => {
+    const nextState = !areAllCurrentDayExpanded;
+    const updated = { ...expandedNodes };
+    currentDayObj.nodes.forEach((_, idx) => {
+      updated[`${selectedDay}-${idx}`] = nextState;
+    });
+    setExpandedNodes(updated);
+  };
 
   const toggleCheck = (id) => {
-    setChecklist(checklist.map(item => item.id === id ? { ...item, done: !item.done } : item));
+    setDoneIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   };
 
-  const completedCount = checklist.filter(c => c.done).length;
-  const progressPercent = Math.round((completedCount / checklist.length) * 100);
+  const resetChecklist = () => {
+    setDoneIds([]);
+  };
 
-  const budgetItems = [
-    { name: "Vé máy bay khứ hồi (4 người)", formula: "3.750.000đ × 4 người", cost: 15000000, type: "Online (Prepaid)", note: "Vé cố định" },
-    { name: "Khách sạn Hotel 99 Chinatown", formula: "500.000đ × 2 phòng × 4 đêm", cost: 4000000, type: "Online (Traveloka)", note: "4 đêm lưu trú" },
-    { name: "Thuế Du Lịch Malaysia (TTx)", formula: "10 MYR × 2 phòng × 4 đêm (80 MYR)", cost: 460000, type: "Tiền mặt tại lễ tân", note: "Bắt buộc tại quầy" },
-    { name: "Đi lại (Grab Car 4-6 chỗ + MRT)", formula: "Khứ hồi sân bay + Grab nội đô chia 4", cost: 3150000, type: "Thẻ / Grab App", note: "Tiện & rẻ hơn tàu" },
-    { name: "Ăn uống 5 ngày (4 người)", formula: "500.000đ / người / ngày × 5 ngày", cost: 10000000, type: "Tiền mặt + Thẻ", note: "Thả ga street food & mall" },
-    { name: "Vé tham quan bảo tàng", formula: "Bảo tàng Hồi Giáo (~20 MYR/người)", cost: 500000, type: "Thẻ / Tiền mặt", note: "ILHAM & Merdeka miễn phí" },
-    { name: "Dự phòng & Sim 4G", formula: "4 SIM + nước uống, phát sinh", cost: 890000, type: "Tiền mặt", note: "Khoản phòng hờ" },
-  ];
-
-  const totalBudget = budgetItems.reduce((acc, curr) => acc + curr.cost, 0);
-
-  const itineraryData = {
-    1: {
-      title: "Ngày 1: Check-in Hotel 99 – REXKL – Mee Tarik – Phố Đêm Jalan Alor",
-      nodes: [
-        { time: "Chiều", title: "Hạ cánh KLIA & Nhận phòng Hotel 99 Chinatown", desc: "Bắt Grab về khách sạn. Nộp 80 MYR thuế du lịch TTx + ~100-200 MYR cọc phòng (deposit) bằng tiền mặt tại lễ tân.", map: "https://maps.google.com/?cid=17279110726563758836" },
-        { time: "16:00 – 17:30", title: "Tổ hợp nghệ thuật sáng tạo REXKL", desc: "Rạp hát cổ cải tạo thành không gian nghệ thuật, chụp ảnh mê cung sách BookXcess cao chạm trần.", map: "https://maps.google.com/?cid=8318395919362480651" },
-        { time: "17:30 – 19:30", title: "Petaling Street Chinatown & Mee Tarik Jalan Sultan", desc: "Thưởng thức mì bò kéo tay thảo quả cay nóng kèm đĩa há cảo chiên giòn rụm chấm dầu ớt.", map: "https://maps.google.com/?cid=534351893711703046" },
-        { time: "20:00 – Khuya", title: "Thiên đường ẩm thực đêm Jalan Alor", desc: "Cánh gà nướng than hoa Wong Ah Wah, lẩu xiên Lok Lok chấm sốt đậu phộng, nước ép trái cây mát lạnh.", map: "https://maps.google.com/?cid=13050949940542192959" }
-      ]
-    },
-    2: {
-      title: "Ngày 2: Roti Canai – Merdeka – Bảo Tàng Hồi Giáo – Din Tai Fung Suria KLCC",
-      nodes: [
-        { time: "08:30 – 10:00", title: "Bữa sáng Roti Banjir Special tại Mansion Tea Stall", desc: "Roti canai chan ngập sốt cà ri dhal, 2 lòng đào béo ngậy kèm ly trà sữa sủi bọt Teh Tarik trứ danh.", map: "https://maps.google.com/?cid=7937314599155281025" },
-        { time: "10:15 – 12:00", title: "Quảng trường Merdeka & Tòa nhà Sultan Abdul Samad", desc: "Chiêm ngưỡng kiến trúc Moorish cổ kính với tháp đồng hồ 41m và các mái vòm đồng biểu tượng.", map: "https://maps.google.com/?cid=3750364922043052889" },
-        { time: "12:30 – 15:00", title: "Bảo tàng Nghệ thuật Hồi giáo (Islamic Arts Museum)", desc: "Chiêm ngưỡng không gian vòm kính ngọc bích tinh xảo, cổ vật và mô hình thánh đường thế giới.", map: "https://maps.google.com/?cid=8999738247126300043" },
-        { time: "15:30 – 17:30", title: "Triển lãm đương đại ILHAM Gallery", desc: "Tọa lạc tại tầng 3 & 5 tòa tháp Ilham Tower, trưng bày nghệ thuật đương đại Đông Nam Á (vào cửa miễn phí).", map: "https://maps.google.com/?cid=13503462404486618185" },
-        { time: "18:00 – 21:30", title: "Ăn tối Din Tai Fung & Nhạc nước Tháp đôi Petronas", desc: "Thưởng thức tiểu long bao tại DIN by Din Tai Fung (Suria KLCC), ra công viên xem biểu diễn nhạc nước Lake Symphony.", map: "https://maps.google.com/?cid=1650228018688243814" }
-      ]
-    },
-    3: {
-      title: "Ngày 3: Oanh Tạc Đại Trung Tâm Thương Mại Mid Valley Megamall & The Gardens",
-      nodes: [
-        { time: "09:30 – 10:30", title: "Bắt Grab sang Mid Valley Megamall", desc: "Đi Grab 4 chỗ từ Chinatown sang Mid Valley chỉ mất ~10-15 phút (~10-15 MYR), cực kỳ nhanh và tiết kiệm.", map: "https://maps.google.com/?cid=6817294246995646399" },
-        { time: "10:30 – 15:30", title: "Khám phá siêu mua sắm Mid Valley Megamall", desc: "Hơn 430 cửa hàng với đầy đủ thương hiệu thời trang quốc tế, Uniqlo cực lớn, siêu thị Aeon Big và phố ẩm thực tầng LG.", map: "https://maps.google.com/?cid=6817294246995646399" },
-        { time: "15:30 – 18:30", title: "Dạo The Gardens Mall (nối liền Mid Valley)", desc: "Đi qua cầu kính sang The Gardens Mall thưởng ngoạn không gian cao cấp, nghỉ chân tại các quán specialty cafe.", map: "https://maps.google.com/?cid=11145328905228581898" },
-        { time: "19:00 – 21:30", title: "Ăn tối tại food court / Dragon-i & Nghỉ ngơi", desc: "Thưởng thức mì kéo sườn sụn, dimsum Dragon-i hoặc các món địa phương phong phú tại food court trước khi về khách sạn." }
-      ]
-    },
-    4: {
-      title: "Ngày 4: Dim Sum Bunn Choon – Siêu Dự Án The Exchange TRX – Pavilion KL",
-      nodes: [
-        { time: "08:30 – 10:00", title: "Dim sum & Bánh tart trứng nghìn lớp Bunn Choon", desc: "Điểm tâm lâu đời từ năm 1893: bánh tart trứng nướng giòn rụm, há cảo tôm tươi, bánh bao xá xíu nóng sốt.", map: "https://maps.google.com/?cid=10783793124020186203" },
-        { time: "10:30 – 15:30", title: "The Exchange TRX & Công viên trên mái TRX City Park", desc: "Khu phức hợp bán lẻ đẳng cấp nhất KL. Lên công viên trên nóc ngắm tháp Merdeka 118, mua sắm các thương hiệu flagship.", map: "https://maps.google.com/?cid=4061662819426486708" },
-        { time: "16:00 – Khuya", title: "Pavilion Kuala Lumpur & Ngã tư Bukit Bintang", desc: "Shopping, ngắm đài phun nước pha lê Liuli, ăn tối phố ẩm thực Tokyo Street và ngắm giao lộ Bukit Bintang sôi động.", map: "https://maps.google.com/?cid=17119990127312478132" }
-      ]
-    },
-    5: {
-      title: "Ngày 5: Săn Đặc Sản Chinatown – Check-out Khách Sạn – Bay Về Việt Nam",
-      nodes: [
-        { time: "09:00 – 11:00", title: "Dạo Chinatown săn đặc sản làm quà", desc: "Mua bánh đậu xanh, trà sữa Teh Tarik gói BOH, cà phê trắng OldTown White Coffee và socola sầu riêng.", map: null },
-        { time: "11:30 – 12:00", title: "Check-out Hotel 99 Chinatown & Nhận lại cọc", desc: "Làm thủ tục trả phòng, nhận lại 100% tiền mặt cọc phòng (deposit) để chi trả ăn trưa nhẹ.", map: null },
-        { time: "Chiều", title: "Đón Grab ra sân bay KLIA/KLIA2 & Bay về", desc: "Gọi Grab Car 4-6 chỗ ra sân bay (khoảng 65-75 MYR + phí cầu đường, chia 4 rất tiết kiệm), làm thủ tục bay về Việt Nam.", map: null }
-      ]
+  const copyHotelAddress = () => {
+    const textToCopy = `${t.transitSection.hotelName} - ${t.transitSection.hotelAddress}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(textToCopy);
+      setCopiedAddress(true);
+      setTimeout(() => setCopiedAddress(false), 2500);
     }
   };
 
-  const mallsInfo = [
-    {
-      name: "Mid Valley Megamall & The Gardens",
-      tag: "Mua Sắm Bình Dân Tới Cao Cấp",
-      highlight: "Quy mô khổng lồ hơn 430 cửa hàng, siêu thị Aeon Big, cầu nối kính sang The Gardens Mall sang trọng.",
-      tip: "Nên dành trọn ít nhất 4–5 tiếng. Đừng bỏ qua tầng LG vì có cả một thế giới đồ ăn vặt và bánh ngọt."
-    },
-    {
-      name: "The Exchange TRX",
-      tag: "Tổ Hợp Hiện Đại Nhất",
-      highlight: "Công viên trên mái TRX City Park ngắm tháp Merdeka 118, quy tụ các thương hiệu flagship đẳng cấp.",
-      tip: "Buổi chiều tầm 16:30 lên công viên trên mái gió mát và chụp ảnh kiến trúc đẹp nhất."
-    },
-    {
-      name: "Pavilion Kuala Lumpur",
-      tag: "Trái Tim Mua Sắm Bukit Bintang",
-      highlight: "Đài phun nước pha lê Liuli biểu tượng, khu phố ẩm thực Tokyo Street tầng 6 và hàng trăm shop thời trang.",
-      tip: "Bước ra ngay trước cổng chính để check-in màn hình LED 3D khổng lồ tại giao lộ sầm uất nhất KL."
-    },
-    {
-      name: "Suria KLCC (Khối Đế Tháp Đôi)",
-      tag: "Điểm Đến Biểu Tượng",
-      highlight: "Tọa lạc ngay khối đế của Tháp Đôi Petronas, nhà hàng Din Tai Fung, công viên hồ nước Symphony.",
-      tip: "Nên ghé nhà hàng Din Tai Fung lấy số sớm từ 17:30 để tránh phải xếp hàng lâu."
-    }
-  ];
+  const totalChecklist = t.checklistSection.items.length;
+  const completedCount = doneIds.length;
+  const progressPercent = Math.round((completedCount / totalChecklist) * 100);
+
+  const totalBudget = t.budgetSection.items.reduce((acc, curr) => acc + curr.cost, 0);
+  const perPersonBudget = Math.round(totalBudget / 4);
+
+  const numericMyr = parseFloat(myrAmount) || 0;
+  const numericRate = parseFloat(exchangeRate) || 5800;
+  const totalBillVnd = Math.round(numericMyr * numericRate);
+  const perPersonMyr = numericMyr / 4;
+  const perPersonVnd = Math.round(totalBillVnd / 4);
+  const coupleMyr = numericMyr / 2;
+  const coupleVnd = Math.round(totalBillVnd / 2);
+
+  const tabIcons = {
+    itinerary: <Calendar size={15} />,
+    transit: <Train size={15} />,
+    budget: <DollarSign size={15} />,
+    malls: <ShoppingBag size={15} />,
+    checklist: <CheckSquare size={15} />
+  };
 
   return (
     <div className="app-wrapper">
-      
-      {/* STYLES & MEDIA QUERIES EMBEDDED */}
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #0f172a; }
-        .app-wrapper { min-height: 100vh; display: flex; flex-direction: column; }
-        .container { width: 100%; max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+        .app-wrapper {
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          background-color: #f1f5f9;
+          color: #0f172a;
+        }
+        .container {
+          width: 100%;
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 0 16px;
+        }
 
-        /* Nav Header */
-        .navbar { position: sticky; top: 0; z-index: 100; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #e2e8f0; }
-        .nav-inner { display: flex; justify-content: space-between; align-items: center; height: 60px; }
-        .nav-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.1rem; color: #1e3a8a; }
-        .nav-tabs { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .nav-tab-btn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; border: none; background: transparent; color: #64748b; font-weight: 600; font-size: 0.85rem; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
-        .nav-tab-btn.active { background: #1e3a8a; color: #ffffff; }
+        /* Sticky Navbar - Fixed so nothing gets clipped or covered */
+        .navbar {
+          position: sticky;
+          top: 0;
+          z-index: 1000;
+          width: 100%;
+          background: rgba(255, 255, 255, 0.98);
+          backdrop-filter: blur(12px);
+          border-bottom: 1px solid #cbd5e1;
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+        }
+        .nav-inner {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 10px 0;
+        }
+        .nav-top-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          gap: 12px;
+        }
+        .nav-logo {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-weight: 800;
+          font-size: 1.05rem;
+          color: #0f172a;
+          white-space: nowrap;
+        }
+        .lang-switch {
+          display: inline-flex;
+          align-items: center;
+          background: #f1f5f9;
+          padding: 3px;
+          border-radius: 999px;
+          border: 1px solid #cbd5e1;
+          flex-shrink: 0;
+        }
+        .lang-btn {
+          border: none;
+          background: transparent;
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 0.76rem;
+          font-weight: 700;
+          cursor: pointer;
+          color: #475569;
+          transition: all 0.2s;
+        }
+        .lang-btn.active {
+          background: #1e3a8a;
+          color: #ffffff;
+          box-shadow: 0 1px 4px rgba(30, 58, 138, 0.3);
+        }
 
-        /* Hero */
-        .hero { background: linear-gradient(135deg, #090d16 0%, #1e3a8a 100%); color: white; padding: 40px 16px 36px; border-radius: 0 0 24px 24px; margin-bottom: 24px; text-align: center; }
-        .hero-pill { display: inline-block; background: rgba(249, 115, 22, 0.2); border: 1px solid #f97316; color: #fb923c; padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; margin-bottom: 12px; }
-        .hero-title { font-size: 1.8rem; font-weight: 800; line-height: 1.2; margin-bottom: 10px; }
-        .hero-desc { font-size: 0.95rem; opacity: 0.9; max-width: 600px; margin: 0 auto 20px; line-height: 1.5; }
-        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 700px; margin: 0 auto; }
-        .stat-card { background: rgba(255,255,255,0.08); backdrop-filter: blur(8px); padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); }
-        .stat-label { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
-        .stat-val { font-size: 1rem; font-weight: 800; margin-top: 2px; }
+        .nav-tabs {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          width: 100%;
+          padding: 2px 2px 4px;
+          -webkit-overflow-scrolling: touch;
+        }
+        .nav-tab-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 8px 14px;
+          border-radius: 999px;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #475569;
+          font-weight: 700;
+          font-size: 0.84rem;
+          cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
+          transition: all 0.2s;
+        }
+        .nav-tab-btn:hover {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
+        .nav-tab-btn.active {
+          background: #1e3a8a;
+          border-color: #1e3a8a;
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(30, 58, 138, 0.25);
+        }
+
+        /* Hero Banner */
+        .hero {
+          background: linear-gradient(135deg, #090d16 0%, #1e3a8a 60%, #0f766e 100%);
+          color: white;
+          padding: 28px 16px 26px;
+          border-radius: 0 0 24px 24px;
+          margin-bottom: 24px;
+          text-align: center;
+        }
+        .hero-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(249, 115, 22, 0.2);
+          border: 1px solid #f97316;
+          color: #fdba74;
+          padding: 5px 14px;
+          border-radius: 999px;
+          font-size: 0.74rem;
+          font-weight: 800;
+          margin-bottom: 12px;
+          letter-spacing: 0.3px;
+        }
+        .hero-title {
+          font-size: 1.85rem;
+          font-weight: 800;
+          line-height: 1.2;
+          margin-bottom: 10px;
+          color: #ffffff;
+        }
+        .hero-desc {
+          font-size: 0.92rem;
+          color: #e2e8f0;
+          max-width: 720px;
+          margin: 0 auto 20px;
+          line-height: 1.55;
+        }
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+          max-width: 880px;
+          margin: 0 auto;
+        }
+        .stat-card {
+          background: rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(8px);
+          padding: 12px 10px;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          text-align: left;
+        }
+        .stat-label {
+          font-size: 0.68rem;
+          color: #cbd5e1;
+          text-transform: uppercase;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+        }
+        .stat-val {
+          font-size: 0.98rem;
+          font-weight: 800;
+          margin-top: 3px;
+          color: #ffffff;
+        }
+        .stat-sub {
+          font-size: 0.74rem;
+          color: #fed7aa;
+          margin-top: 2px;
+          font-weight: 500;
+        }
 
         /* Section Headings */
-        .section-header { margin-bottom: 16px; }
-        .section-title { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .section-header {
+          margin-bottom: 16px;
+        }
+        .section-title {
+          font-size: 1.25rem;
+          font-weight: 800;
+          color: #0f172a;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+        .section-sub {
+          font-size: 0.88rem;
+          color: #475569;
+        }
 
-        /* Grid Cards */
-        .grid-cards { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
-        .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+        /* Day Selector Pills */
+        .day-scroller {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding-bottom: 10px;
+          margin-bottom: 16px;
+          -webkit-overflow-scrolling: touch;
+        }
+        .day-pill {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          padding: 10px 16px;
+          border-radius: 14px;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #334155;
+          cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
+          transition: all 0.2s;
+        }
+        .day-pill:hover {
+          border-color: #94a3b8;
+        }
+        .day-pill-top {
+          font-weight: 800;
+          font-size: 0.86rem;
+        }
+        .day-pill-sub {
+          font-size: 0.72rem;
+          opacity: 0.8;
+          margin-top: 2px;
+        }
+        .day-pill.active {
+          background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+          border-color: #ea580c;
+          color: #ffffff;
+          box-shadow: 0 4px 12px rgba(234, 88, 12, 0.28);
+        }
 
-        /* Timeline */
-        .day-scroller { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 16px; -webkit-overflow-scrolling: touch; }
-        .day-pill { padding: 8px 14px; border-radius: 999px; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; font-weight: 600; font-size: 0.85rem; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
-        .day-pill.active { background: #f97316; border-color: #f97316; color: #ffffff; box-shadow: 0 4px 10px rgba(249, 115, 22, 0.25); }
-        .timeline { border-left: 2px solid #fdba74; padding-left: 18px; margin-left: 6px; }
-        .timeline-item { position: relative; margin-bottom: 24px; }
-        .timeline-dot { position: absolute; left: -25px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #ffffff; border: 3px solid #f97316; }
-        .time-badge { font-size: 0.75rem; font-weight: 800; color: #ea580c; text-transform: uppercase; margin-bottom: 2px; }
-        .place-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
-        .place-desc { font-size: 0.88rem; color: #64748b; line-height: 1.5; }
-        .map-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 0.78rem; color: #1e3a8a; background: #eff6ff; padding: 4px 10px; border-radius: 6px; text-decoration: none; font-weight: 600; border: 1px solid #bfdbfe; }
+        /* Cards & Alerts */
+        .card {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 18px;
+          padding: 20px;
+          box-shadow: 0 2px 12px rgba(15, 23, 42, 0.03);
+          margin-bottom: 18px;
+        }
+        .grid-cards {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 16px;
+          margin-bottom: 20px;
+        }
+        .alert-banner {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          font-size: 0.86rem;
+          line-height: 1.45;
+          margin-bottom: 20px;
+          font-weight: 500;
+        }
+        .alert-banner.info {
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
+          color: #1e3a8a;
+        }
+        .alert-banner.warning {
+          background: #fff7ed;
+          border: 1px solid #fed7aa;
+          color: #9a3412;
+        }
+        .alert-banner.success {
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          color: #166534;
+        }
 
-        /* Budget Responsive Table / Cards */
-        .desktop-table { display: none; width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        .desktop-table th, .desktop-table td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; text-align: left; }
-        .desktop-table th { background: #f8fafc; color: #64748b; font-size: 0.8rem; text-transform: uppercase; }
-        .mobile-budget-list { display: flex; flex-direction: column; gap: 10px; }
-        .budget-card-item { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; display: flex; justify-content: space-between; align-items: flex-start; }
-        .budget-card-info { flex: 1; padding-right: 12px; }
-        .budget-card-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 2px; }
-        .budget-card-sub { font-size: 0.8rem; color: #64748b; }
-        .budget-card-val { text-align: right; }
-        .budget-card-cost { font-weight: 700; font-size: 0.95rem; color: #0f172a; }
-        .budget-card-type { font-size: 0.72rem; color: #1e3a8a; background: #e0f2fe; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+        /* Detailed Itinerary Timeline */
+        .timeline {
+          border-left: 3px solid #cbd5e1;
+          padding-left: 20px;
+          margin-left: 8px;
+        }
+        .timeline-item {
+          position: relative;
+          margin-bottom: 24px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 16px;
+        }
+        .timeline-item:last-child {
+          margin-bottom: 0;
+        }
+        .timeline-dot {
+          position: absolute;
+          left: -29px;
+          top: 20px;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #ffffff;
+          border: 3.5px solid #f97316;
+        }
+        .time-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 0.76rem;
+          font-weight: 800;
+          color: #c2410c;
+          background: #ffedd5;
+          padding: 3px 10px;
+          border-radius: 999px;
+          margin-bottom: 8px;
+        }
+        .place-title {
+          font-size: 1.06rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin-bottom: 6px;
+        }
+        .place-desc {
+          font-size: 0.88rem;
+          color: #475569;
+          line-height: 1.55;
+          margin-bottom: 12px;
+        }
+
+        /* From -> To Box */
+        .from-to-box {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 8px;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 12px;
+          padding: 10px 12px;
+          margin-bottom: 10px;
+        }
+        .endpoint-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+        }
+        .endpoint-label {
+          font-size: 0.68rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          color: #64748b;
+          display: block;
+        }
+        .endpoint-val {
+          font-size: 0.84rem;
+          font-weight: 700;
+          color: #0f172a;
+        }
+
+        /* Collapsible Primary Route Summary + Details Box */
+        .rail-box {
+          background: #ffffff;
+          border-radius: 12px;
+          border: 1px solid #cbd5e1;
+          border-left-width: 5px;
+          overflow: hidden;
+          margin-bottom: 12px;
+        }
+        .rail-summary-bar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 11px 14px;
+          cursor: pointer;
+          user-select: none;
+          transition: background 0.15s;
+        }
+        .rail-summary-bar:hover {
+          background: #f8fafc;
+        }
+        .rail-summary-left {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .rail-mode-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #ffffff;
+          font-size: 0.76rem;
+          font-weight: 800;
+          padding: 4px 10px;
+          border-radius: 6px;
+        }
+        .rail-meta {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          font-size: 0.76rem;
+          font-weight: 700;
+          color: #1e293b;
+        }
+        .rail-meta span {
+          background: #f1f5f9;
+          padding: 3px 8px;
+          border-radius: 6px;
+          border: 1px solid #e2e8f0;
+        }
+        .toggle-dir-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.76rem;
+          font-weight: 800;
+          color: #1e3a8a;
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
+          padding: 4px 10px;
+          border-radius: 999px;
+          cursor: pointer;
+        }
+        .rail-expanded-body {
+          padding: 12px 14px 14px;
+          border-top: 1px dashed #e2e8f0;
+          background: #fcfdff;
+        }
+        .rail-steps {
+          list-style: none;
+          padding: 0;
+          margin: 0 0 12px 0;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .rail-steps li {
+          font-size: 0.85rem;
+          color: #1e293b;
+          line-height: 1.5;
+          padding-left: 14px;
+          position: relative;
+        }
+        .rail-steps li::before {
+          content: "•";
+          position: absolute;
+          left: 2px;
+          color: #f97316;
+          font-weight: 900;
+        }
+
+        /* Backup & Group Tip */
+        .sub-info-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .backup-box {
+          background: #f1f5f9;
+          border-radius: 10px;
+          padding: 9px 12px;
+          font-size: 0.81rem;
+          color: #475569;
+          line-height: 1.45;
+        }
+        .tip-box {
+          background: #fffbeb;
+          border: 1px solid #fde68a;
+          border-radius: 10px;
+          padding: 9px 12px;
+          font-size: 0.82rem;
+          color: #92400e;
+          line-height: 1.45;
+        }
+
+        /* Action Map Links */
+        .map-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .map-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 0.78rem;
+          color: #1e3a8a;
+          background: #eff6ff;
+          padding: 6px 12px;
+          border-radius: 8px;
+          text-decoration: none;
+          font-weight: 700;
+          border: 1px solid #bfdbfe;
+          transition: all 0.15s;
+        }
+        .map-link:hover {
+          background: #dbeafe;
+        }
+        .map-link.route {
+          background: #0f766e;
+          color: #ffffff;
+          border-color: #0f766e;
+        }
+        .map-link.route:hover {
+          background: #115e59;
+        }
+
+        /* Bill Splitter Widget */
+        .calc-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 14px;
+          margin-top: 14px;
+        }
+        .calc-inputs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .input-group label {
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #475569;
+          margin-bottom: 4px;
+        }
+        .input-group input {
+          width: 100%;
+          padding: 10px 12px;
+          border-radius: 10px;
+          border: 1px solid #cbd5e1;
+          font-size: 1rem;
+          font-weight: 700;
+          color: #0f172a;
+        }
+        .preset-pills {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-top: 8px;
+        }
+        .preset-btn {
+          border: 1px solid #cbd5e1;
+          background: #f8fafc;
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #334155;
+          cursor: pointer;
+        }
+        .preset-btn:hover {
+          background: #e2e8f0;
+        }
+        .split-results {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+        .split-box {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 10px 12px;
+        }
+        .split-box-label {
+          font-size: 0.72rem;
+          color: #64748b;
+          font-weight: 700;
+        }
+        .split-box-val {
+          font-size: 1rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin-top: 2px;
+        }
+        .split-box-sub {
+          font-size: 0.78rem;
+          color: #0f766e;
+          font-weight: 700;
+        }
+
+        /* Budget Table & Mobile List */
+        .desktop-table {
+          display: none;
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.9rem;
+        }
+        .desktop-table th,
+        .desktop-table td {
+          padding: 13px 16px;
+          border-bottom: 1px solid #f1f5f9;
+          text-align: left;
+        }
+        .desktop-table th {
+          background: #f8fafc;
+          color: #475569;
+          font-size: 0.78rem;
+          text-transform: uppercase;
+          font-weight: 800;
+        }
+        .mobile-budget-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .budget-card-item {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 14px;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+        }
 
         /* Checklist */
-        .check-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px dashed #e2e8f0; cursor: pointer; }
-        .check-text { flex: 1; font-size: 0.9rem; line-height: 1.4; }
-        .check-tag { font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
-
-        /* Responsive Breakpoints */
-        @media (min-width: 640px) {
-          .stats-grid { grid-template-columns: repeat(4, 1fr); }
-          .hero-title { font-size: 2.3rem; }
+        .check-row {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 14px 0;
+          border-bottom: 1px dashed #e2e8f0;
+          cursor: pointer;
         }
+        .check-row:last-child {
+          border-bottom: none;
+        }
+        .check-text {
+          flex: 1;
+          font-size: 0.9rem;
+          line-height: 1.45;
+        }
+        .check-tag {
+          font-size: 0.72rem;
+          font-weight: 700;
+          padding: 3px 8px;
+          border-radius: 6px;
+          white-space: nowrap;
+        }
+
+        @media (min-width: 640px) {
+          .stats-grid {
+            grid-template-columns: repeat(4, 1fr);
+          }
+          .hero-title {
+            font-size: 2.3rem;
+          }
+          .from-to-box {
+            grid-template-columns: 1fr 1fr;
+          }
+          .split-results {
+            grid-template-columns: repeat(4, 1fr);
+          }
+        }
+
         @media (min-width: 768px) {
-          .grid-cards { grid-template-columns: 1fr 1fr; }
-          .desktop-table { display: table; }
-          .mobile-budget-list { display: none; }
+          .nav-inner {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+          }
+          .nav-top-row {
+            width: auto;
+            gap: 14px;
+          }
+          .nav-tabs {
+            width: auto;
+            overflow-x: visible;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            padding: 0;
+          }
+          .grid-cards {
+            grid-template-columns: 1fr 1fr;
+          }
+          .sub-info-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+          .desktop-table {
+            display: table;
+          }
+          .mobile-budget-list {
+            display: none;
+          }
         }
       `}</style>
 
-      {/* STICKY NAVBAR */}
+      {/* STICKY NAVBAR WITH BILINGUAL SWITCHER */}
       <nav className="navbar">
         <div className="container nav-inner">
-          <div className="nav-logo">
-            <Compass size={20} color="#f97316" /> KL 5N4Đ
+          <div className="nav-top-row">
+            <div className="nav-logo">
+              <Train size={20} color="#f97316" />
+              <span>{t.nav.brand}</span>
+            </div>
+
+            <div className="lang-switch" role="group" aria-label="Language Switcher">
+              <button
+                type="button"
+                onClick={() => setLang('vi')}
+                className={`lang-btn ${lang === 'vi' ? 'active' : ''}`}
+              >
+                🇻🇳 VI
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                className={`lang-btn ${lang === 'en' ? 'active' : ''}`}
+              >
+                🇬🇧 EN
+              </button>
+            </div>
           </div>
-          
+
           <div className="nav-tabs">
-            {[
-              { key: 'itinerary', label: 'Lịch Trình', icon: <Calendar size={15} /> },
-              { key: 'budget', label: 'Ngân Sách', icon: <DollarSign size={15} /> },
-              { key: 'checklist', label: 'Checklist', icon: <CheckSquare size={15} /> },
-              { key: 'malls', label: 'Mega Malls', icon: <ShoppingBag size={15} /> }
-            ].map(tab => (
+            {t.nav.tabs.map((tab) => (
               <button
                 key={tab.key}
+                type="button"
                 onClick={() => setCurrentTab(tab.key)}
                 className={`nav-tab-btn ${currentTab === tab.key ? 'active' : ''}`}
               >
-                {tab.icon} {tab.label}
+                {tabIcons[tab.key]} {tab.label}
               </button>
             ))}
           </div>
         </div>
       </nav>
 
-      {/* HERO SECTION */}
+      {/* HERO BANNER */}
       <header className="hero">
         <div className="container">
-          <div className="hero-pill">KẾ HOẠCH DU LỊCH 2026</div>
-          <h1 className="hero-title">Kuala Lumpur 5N4Đ</h1>
-          <p className="hero-desc">
-            Trải nghiệm mua sắm Mega Malls (Mid Valley, TRX, Pavilion), chợ đêm Chinatown & di sản văn hóa cho nhóm 4 người.
-          </p>
+          <div className="hero-pill">
+            <Footprints size={14} /> {t.hero.pill}
+          </div>
+          <h1 className="hero-title">{t.hero.title}</h1>
+          <p className="hero-desc">{t.hero.subtitle}</p>
 
           <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-label">ĐOÀN</div>
-              <div className="stat-val">👥 4 Người</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">NGÂN SÁCH</div>
-              <div className="stat-val" style={{ color: '#fb923c' }}>💰 34 Triệu</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">LƯU TRÚ</div>
-              <div className="stat-val">🏨 Hotel 99 (4Đ)</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">VÉ BAY KHỨ HỒI</div>
-              <div className="stat-val">✈️ 15 Triệu</div>
-            </div>
+            {t.hero.stats.map((st, i) => (
+              <div key={i} className="stat-card">
+                <div className="stat-label">{st.label}</div>
+                <div className="stat-val">{st.val}</div>
+                <div className="stat-sub">{st.sub}</div>
+              </div>
+            ))}
           </div>
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA */}
-      <main className="container" style={{ flex: 1, paddingBottom: '40px' }}>
-
-        {/* TAB 1: ITINERARY */}
+      {/* MAIN CONTENT */}
+      <main className="container" style={{ flex: 1, paddingBottom: '44px' }}>
+        {/* TAB 1: DETAILED ITINERARY & COLLAPSIBLE DIRECTIONS */}
         {currentTab === 'itinerary' && (
           <div>
             <div className="section-header">
-              <h2 className="section-title"><Calendar size={20} color="#f97316" /> Lịch Trình Từng Ngày</h2>
+              <h2 className="section-title">
+                <Calendar size={22} color="#f97316" /> {t.itinerarySection.heading}
+              </h2>
+              <p className="section-sub">{t.itinerarySection.subHeading}</p>
             </div>
 
             <div className="day-scroller">
-              {[1, 2, 3, 4, 5].map(day => (
+              {t.itinerarySection.days.map((d) => (
                 <button
-                  key={day}
-                  onClick={() => setSelectedDay(day)}
-                  className={`day-pill ${selectedDay === day ? 'active' : ''}`}
+                  key={d.day}
+                  type="button"
+                  onClick={() => setSelectedDay(d.day)}
+                  className={`day-pill ${selectedDay === d.day ? 'active' : ''}`}
                 >
-                  Ngày {day} {day === 3 ? '🔥 Mid Valley' : ''}
+                  <span className="day-pill-top">{d.shortLabel}</span>
+                  <span className="day-pill-sub">{d.tag}</span>
                 </button>
               ))}
             </div>
 
             <div className="card">
-              <h3 style={{ fontSize: '1.1rem', color: '#1e3a8a', marginBottom: '20px', fontWeight: 700 }}>
-                {itineraryData[selectedDay].title}
-              </h3>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  marginBottom: '14px'
+                }}
+              >
+                <h3 style={{ fontSize: '1.12rem', color: '#1e3a8a', fontWeight: 800, flex: 1 }}>
+                  {currentDayObj.title}
+                </h3>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      background: '#e0f2fe',
+                      color: '#0369a1',
+                      fontWeight: 700,
+                      fontSize: '0.76rem',
+                      padding: '4px 10px',
+                      borderRadius: '999px'
+                    }}
+                  >
+                    📅 {currentDayObj.date}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={toggleAllCurrentDay}
+                    className="toggle-dir-btn"
+                  >
+                    {areAllCurrentDayExpanded ? (
+                      <>
+                        <ChevronUp size={14} /> {t.itinerarySection.collapseAllBtn}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={14} /> {t.itinerarySection.expandAllBtn}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {currentDayObj.alert && (
+                <div className={`alert-banner ${currentDayObj.alert.type}`}>
+                  <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>{currentDayObj.alert.text}</div>
+                </div>
+              )}
 
               <div className="timeline">
-                {itineraryData[selectedDay].nodes.map((node, idx) => (
-                  <div key={idx} className="timeline-item">
-                    <div className="timeline-dot"></div>
-                    <div className="time-badge">{node.time}</div>
-                    <div className="place-title">{node.title}</div>
-                    <div className="place-desc">{node.desc}</div>
-                    {node.map && (
-                      <a href={node.map} target="_blank" rel="noreferrer" className="map-link">
-                        <MapPin size={12} /> Google Maps <ExternalLink size={11} />
-                      </a>
-                    )}
-                  </div>
-                ))}
+                {currentDayObj.nodes.map((node, idx) => {
+                  const isExpanded = !!expandedNodes[`${selectedDay}-${idx}`];
+                  return (
+                    <div key={idx} className="timeline-item">
+                      <div className="timeline-dot"></div>
+
+                      <div className="time-badge">
+                        <Clock size={12} /> {node.time}
+                      </div>
+                      <div className="place-title">{node.title}</div>
+                      <div className="place-desc">{node.desc}</div>
+
+                      {/* Explicit From -> To Endpoints */}
+                      <div className="from-to-box">
+                        <div className="endpoint-item">
+                          <MapPin
+                            size={15}
+                            color="#64748b"
+                            style={{ flexShrink: 0, marginTop: '2px' }}
+                          />
+                          <div>
+                            <span className="endpoint-label">{t.itinerarySection.fromLabel}</span>
+                            <span className="endpoint-val">{node.from}</span>
+                          </div>
+                        </div>
+                        <div className="endpoint-item">
+                          <Navigation
+                            size={15}
+                            color="#ea580c"
+                            style={{ flexShrink: 0, marginTop: '2px' }}
+                          />
+                          <div>
+                            <span className="endpoint-label">{t.itinerarySection.toLabel}</span>
+                            <span className="endpoint-val">{node.to}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Collapsible Primary Route Box (Default = Collapsed) */}
+                      <div
+                        className="rail-box"
+                        style={{ borderLeftColor: node.primaryTransit.badgeColor }}
+                      >
+                        <div
+                          className="rail-summary-bar"
+                          onClick={() => toggleNodeExpand(selectedDay, idx)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleNodeExpand(selectedDay, idx);
+                            }
+                          }}
+                        >
+                          <div className="rail-summary-left">
+                            <span
+                              className="rail-mode-badge"
+                              style={{ backgroundColor: node.primaryTransit.badgeColor }}
+                            >
+                              {node.primaryTransit.mode}
+                            </span>
+                            <div className="rail-meta">
+                              <span>⏱️ {node.primaryTransit.duration}</span>
+                              <span>🎫 {node.primaryTransit.cost}</span>
+                            </div>
+                          </div>
+
+                          <span className="toggle-dir-btn">
+                            {isExpanded ? (
+                              <>
+                                {t.itinerarySection.collapseBtn} <ChevronUp size={14} />
+                              </>
+                            ) : (
+                              <>
+                                {t.itinerarySection.expandBtn} <ChevronDown size={14} />
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="rail-expanded-body">
+                            <ul className="rail-steps">
+                              {node.primaryTransit.steps.map((step, sIdx) => (
+                                <li key={sIdx}>{step}</li>
+                              ))}
+                            </ul>
+
+                            <div className="sub-info-grid">
+                              <div className="backup-box">
+                                <strong>🔄 {t.itinerarySection.backupLabel}:</strong>{' '}
+                                {node.backupTransit}
+                              </div>
+                              <div className="tip-box">
+                                <strong>💡 {t.itinerarySection.groupTipLabel}:</strong>{' '}
+                                {node.groupTip}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Map Action Links */}
+                      <div className="map-actions">
+                        {node.mapPinUrl && (
+                          <a
+                            href={node.mapPinUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="map-link"
+                          >
+                            <MapPin size={13} /> {t.itinerarySection.openPinBtn}{' '}
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                        {node.mapRouteUrl && (
+                          <a
+                            href={node.mapRouteUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="map-link route"
+                          >
+                            <Navigation size={13} /> {t.itinerarySection.openRouteBtn}{' '}
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 2: BUDGET & PAYMENT */}
+        {/* TAB 2: MRT / LRT STATION RADAR AROUND HOTEL 99 KL CITY */}
+        {currentTab === 'transit' && (
+          <div>
+            <div className="section-header">
+              <h2 className="section-title">
+                <Train size={22} color="#f97316" /> {t.transitSection.heading}
+              </h2>
+              <p className="section-sub">{t.transitSection.subHeading}</p>
+            </div>
+
+            {/* Hotel 99 Kuala Lumpur City Address & Room Card */}
+            <div
+              className="card"
+              style={{
+                borderLeft: '5px solid #1e3a8a',
+                background: 'linear-gradient(to right, #ffffff, #f8fafc)'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      background: '#dbeafe',
+                      color: '#1e3a8a',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      padding: '3px 10px',
+                      borderRadius: '999px',
+                      marginBottom: '6px'
+                    }}
+                  >
+                    🏨 {t.transitSection.hotelCardTitle}
+                  </span>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                    {t.transitSection.hotelName}
+                  </h3>
+                  <p style={{ fontSize: '0.92rem', fontWeight: 700, color: '#1e3a8a', marginTop: '4px' }}>
+                    📍 {t.transitSection.hotelAddress}
+                  </p>
+                  <p style={{ fontSize: '0.84rem', color: '#475569', marginTop: '4px' }}>
+                    🧭 {t.transitSection.hotelLandmark}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: '0.84rem',
+                      color: '#9a3412',
+                      background: '#ffedd5',
+                      display: 'inline-block',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      marginTop: '8px'
+                    }}
+                  >
+                    🛏️ {t.transitSection.roomSetup}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={copyHotelAddress}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid #cbd5e1',
+                      background: copiedAddress ? '#16a34a' : '#ffffff',
+                      color: copiedAddress ? '#ffffff' : '#0f172a',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {copiedAddress ? <Check size={15} /> : <Copy size={15} />}
+                    {copiedAddress ? t.transitSection.copiedBtn : t.transitSection.copyBtn}
+                  </button>
+                  <a
+                    href="https://maps.google.com/?cid=17279110726563758836"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="map-link route"
+                  >
+                    <MapPin size={14} /> Google Maps <ExternalLink size={12} />
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* 4 Surrounding Rail Stations */}
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '12px' }}>
+              🚇 {t.transitSection.stationsTitle}
+            </h3>
+            <div className="grid-cards">
+              {t.transitSection.stations.map((st, idx) => (
+                <div
+                  key={idx}
+                  className="card"
+                  style={{
+                    marginBottom: 0,
+                    borderTop: `4px solid ${st.color}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <div>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        background: st.color,
+                        color: '#ffffff',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        marginBottom: '8px'
+                      }}
+                    >
+                      {st.line}
+                    </span>
+                    <h4 style={{ fontSize: '1.02rem', fontWeight: 800, marginBottom: '4px' }}>
+                      {st.name}
+                    </h4>
+                    <p
+                      style={{
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        color: '#ea580c',
+                        marginBottom: '8px'
+                      }}
+                    >
+                      🚶 {st.walk}
+                    </p>
+                    <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>
+                      {st.connectsTo}
+                    </p>
+                  </div>
+                  <div style={{ marginTop: '12px' }}>
+                    <a
+                      href={st.mapUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="map-link"
+                    >
+                      <Navigation size={13} />{' '}
+                      {lang === 'vi' ? 'Chỉ đường đi bộ từ KS' : 'Walking Route from Hotel'}{' '}
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* How to Buy Tickets & KLIA Terminal Guide */}
+            <div className="grid-cards">
+              <div className="card" style={{ marginBottom: 0 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '12px', color: '#1e3a8a' }}>
+                  🎫 {t.transitSection.ticketGuideTitle}
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {t.transitSection.ticketTips.map((tip, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: '#f8fafc',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0'
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.86rem', marginBottom: '3px' }}>
+                        {tip.title}
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.45 }}>
+                        {tip.desc}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ marginBottom: 0 }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '12px', color: '#1e3a8a' }}>
+                  ✈️ {t.transitSection.terminalTitle}
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {t.transitSection.terminals.map((term, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: '#f8fafc',
+                        padding: '12px',
+                        borderRadius: '10px',
+                        borderLeft: idx === 0 ? '4px solid #2563eb' : '4px solid #ef4444'
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '4px' }}>
+                        {term.name}
+                      </div>
+                      <div style={{ fontSize: '0.83rem', fontWeight: 700, color: '#0f172a' }}>
+                        🛫 {term.airlines}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '4px' }}>
+                        {term.note}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: BUDGET & LIVE BILL SPLITTER */}
         {currentTab === 'budget' && (
           <div>
             <div className="section-header">
-              <h2 className="section-title"><DollarSign size={20} color="#f97316" /> Chi Tiêu & Thanh Toán</h2>
+              <h2 className="section-title">
+                <DollarSign size={22} color="#f97316" /> {t.budgetSection.heading}
+              </h2>
             </div>
 
+            {/* Interactive MYR <-> VND Converter & Group Splitter */}
+            <div
+              className="card"
+              style={{
+                borderTop: '4px solid #0f766e',
+                background: 'linear-gradient(to bottom, #ffffff, #f0fdfa)'
+              }}
+            >
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f766e' }}>
+                🧮 {t.budgetSection.calcTitle}
+              </h3>
+              <p style={{ fontSize: '0.84rem', color: '#475569', marginTop: '2px' }}>
+                {t.budgetSection.calcSub}
+              </p>
+
+              <div className="calc-grid">
+                <div>
+                  <div className="calc-inputs">
+                    <div className="input-group">
+                      <label>{t.budgetSection.myrInputLabel}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={myrAmount}
+                        onChange={(e) => setMyrAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label>{t.budgetSection.rateInputLabel}</label>
+                      <input
+                        type="number"
+                        min="1000"
+                        step="50"
+                        value={exchangeRate}
+                        onChange={(e) => setExchangeRate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="preset-pills">
+                    {[10, 25, 60, 100, 180, 300].map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setMyrAmount(String(val))}
+                        className="preset-btn"
+                      >
+                        {val} MYR
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="split-results">
+                  <div className="split-box">
+                    <div className="split-box-label">{t.budgetSection.totalVndLabel}</div>
+                    <div className="split-box-val">{totalBillVnd.toLocaleString('vi-VN')} đ</div>
+                    <div className="split-box-sub">{numericMyr.toFixed(2)} MYR</div>
+                  </div>
+                  <div className="split-box">
+                    <div className="split-box-label">{t.budgetSection.perPersonLabel}</div>
+                    <div className="split-box-val">{perPersonVnd.toLocaleString('vi-VN')} đ</div>
+                    <div className="split-box-sub">{perPersonMyr.toFixed(2)} MYR</div>
+                  </div>
+                  <div className="split-box" style={{ borderColor: '#fdba74', background: '#fff7ed' }}>
+                    <div className="split-box-label">{t.budgetSection.coupleShareLabel}</div>
+                    <div className="split-box-val">{coupleVnd.toLocaleString('vi-VN')} đ</div>
+                    <div className="split-box-sub">{coupleMyr.toFixed(2)} MYR</div>
+                  </div>
+                  <div className="split-box" style={{ borderColor: '#bfdbfe', background: '#eff6ff' }}>
+                    <div className="split-box-label">{t.budgetSection.singleGirlLabel}</div>
+                    <div className="split-box-val">{perPersonVnd.toLocaleString('vi-VN')} đ</div>
+                    <div className="split-box-sub">{perPersonMyr.toFixed(2)} MYR</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Cash vs Card Split */}
             <div className="grid-cards">
-              <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <strong style={{ fontSize: '0.95rem' }}>TIỀN MẶT (CASH - 40%)</strong>
-                  <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700 }}>~1.200 - 1.500 MYR</span>
+              {t.budgetSection.cashCardSplit.map((box, idx) => (
+                <div
+                  key={idx}
+                  className="card"
+                  style={{ borderLeft: `4px solid ${box.color}`, marginBottom: 0 }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '10px'
+                    }}
+                  >
+                    <strong style={{ fontSize: '0.95rem' }}>{box.title}</strong>
+                    <span
+                      style={{
+                        background: box.bg,
+                        color: box.color,
+                        padding: '3px 9px',
+                        borderRadius: '999px',
+                        fontSize: '0.73rem',
+                        fontWeight: 800
+                      }}
+                    >
+                      {box.badge}
+                    </span>
+                  </div>
+                  <ul
+                    style={{
+                      fontSize: '0.85rem',
+                      color: '#475569',
+                      paddingLeft: '18px',
+                      lineHeight: 1.55
+                    }}
+                  >
+                    {box.items.map((line, lIdx) => (
+                      <li key={lIdx} style={{ marginBottom: '4px' }}>
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul style={{ fontSize: '0.85rem', color: '#475569', paddingLeft: '18px', lineHeight: 1.5 }}>
-                  <li><strong>Thuế TTx:</strong> 80 MYR (10 MYR × 2 phòng × 4 đêm) nộp tại Hotel 99.</li>
-                  <li><strong>Cọc phòng:</strong> ~100–200 MYR tiền mặt (hoàn 100% khi check-out).</li>
-                  <li><strong>Ẩm thực vỉa hè:</strong> Đồ ăn vặt Jalan Alor, roti Mansion Tea Stall, Chinatown.</li>
-                  <li><strong>Nạp thẻ tàu MRT:</strong> Máy tự động chỉ nhận tiền giấy Ringgit mệnh giá nhỏ.</li>
-                </ul>
-              </div>
-
-              <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <strong style={{ fontSize: '0.95rem' }}>QUẸT THẺ / APP (60%)</strong>
-                  <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700 }}>Visa / Master / Grab</span>
-                </div>
-                <ul style={{ fontSize: '0.85rem', color: '#475569', paddingLeft: '18px', lineHeight: 1.5 }}>
-                  <li><strong>Grab Car:</strong> Gọi xe 4 chỗ tự động trừ qua thẻ ngân hàng.</li>
-                  <li><strong>Mega Malls:</strong> Mid Valley Megamall, The Gardens, TRX, Pavilion.</li>
-                  <li><strong>Nhà hàng & Cafe:</strong> Din Tai Fung Suria KLCC, contactless không phụ phí.</li>
-                  <li><strong>Siêu thị tiện lợi:</strong> 7-Eleven, FamilyMart quẹt thẻ mọi đơn hàng.</li>
-                </ul>
-              </div>
+              ))}
             </div>
 
-            {/* Desktop Table View */}
+            {/* Budget Table / Mobile Cards */}
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <table className="desktop-table">
                 <thead>
                   <tr>
-                    <th>Khoản mục</th>
-                    <th>Chi tiết tính</th>
-                    <th>Hình thức</th>
-                    <th style={{ textAlign: 'right' }}>Số tiền (VNĐ)</th>
+                    <th>{t.budgetSection.tableHeaders[0]}</th>
+                    <th>{t.budgetSection.tableHeaders[1]}</th>
+                    <th>{t.budgetSection.tableHeaders[2]}</th>
+                    <th style={{ textAlign: 'right' }}>{t.budgetSection.tableHeaders[3]}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {budgetItems.map((b, idx) => (
+                  {t.budgetSection.items.map((b, idx) => (
                     <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{b.name}</td>
-                      <td style={{ color: '#64748b' }}>{b.formula}</td>
-                      <td style={{ fontSize: '0.8rem', color: '#1e3a8a' }}>{b.type}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{b.cost.toLocaleString('vi-VN')} đ</td>
+                      <td style={{ fontWeight: 700 }}>{b.name}</td>
+                      <td style={{ color: '#475569' }}>{b.formula}</td>
+                      <td>
+                        <span
+                          style={{
+                            fontSize: '0.76rem',
+                            color: '#1e3a8a',
+                            background: '#eff6ff',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontWeight: 700
+                          }}
+                        >
+                          {b.type}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                        {b.cost.toLocaleString('vi-VN')} đ
+                      </td>
                     </tr>
                   ))}
                   <tr style={{ background: '#eff6ff', color: '#1e3a8a', fontWeight: 800 }}>
-                    <td>TỔNG CỘNG</td>
-                    <td colSpan={2} style={{ fontSize: '0.85rem' }}>Khớp trọn vẹn ngân sách 5N4Đ</td>
-                    <td style={{ textAlign: 'right' }}>{totalBudget.toLocaleString('vi-VN')} đ</td>
+                    <td colSpan={3}>{t.budgetSection.totalLabel}</td>
+                    <td style={{ textAlign: 'right', fontSize: '1.05rem' }}>
+                      {totalBudget.toLocaleString('vi-VN')} đ
+                    </td>
+                  </tr>
+                  <tr style={{ background: '#fff7ed', color: '#c2410c', fontWeight: 800 }}>
+                    <td colSpan={3}>{t.budgetSection.perPersonTotalLabel}</td>
+                    <td style={{ textAlign: 'right', fontSize: '1rem' }}>
+                      {perPersonBudget.toLocaleString('vi-VN')} đ / pax
+                    </td>
                   </tr>
                 </tbody>
               </table>
 
-              {/* Mobile Card View (Tự chuyển đổi trên điện thoại) */}
               <div className="mobile-budget-list" style={{ padding: '12px' }}>
-                {budgetItems.map((b, idx) => (
+                {t.budgetSection.items.map((b, idx) => (
                   <div key={idx} className="budget-card-item">
-                    <div className="budget-card-info">
-                      <div className="budget-card-name">{b.name}</div>
-                      <div className="budget-card-sub">{b.formula}</div>
-                      <span className="budget-card-type">{b.type}</span>
+                    <div style={{ flex: 1, paddingRight: '10px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{b.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+                        {b.formula}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          color: '#1e3a8a',
+                          background: '#e0f2fe',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                          marginTop: '6px',
+                          fontWeight: 700
+                        }}
+                      >
+                        {b.type}
+                      </span>
                     </div>
-                    <div className="budget-card-val">
-                      <div className="budget-card-cost">{b.cost.toLocaleString('vi-VN')} đ</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
+                      {b.cost.toLocaleString('vi-VN')} đ
                     </div>
                   </div>
                 ))}
-                <div style={{ background: '#eff6ff', borderRadius: '12px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-                  <strong style={{ color: '#1e3a8a', fontSize: '0.95rem' }}>TỔNG DỰ TOÁN:</strong>
-                  <strong style={{ color: '#1e3a8a', fontSize: '1.05rem' }}>{totalBudget.toLocaleString('vi-VN')} đ</strong>
+                <div
+                  style={{
+                    background: '#eff6ff',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <strong style={{ color: '#1e3a8a', fontSize: '0.88rem' }}>
+                    {t.budgetSection.totalLabel}:
+                  </strong>
+                  <strong style={{ color: '#1e3a8a', fontSize: '1.02rem' }}>
+                    {totalBudget.toLocaleString('vi-VN')} đ
+                  </strong>
+                </div>
+                <div
+                  style={{
+                    background: '#fff7ed',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <strong style={{ color: '#c2410c', fontSize: '0.85rem' }}>
+                    {t.budgetSection.perPersonTotalLabel}:
+                  </strong>
+                  <strong style={{ color: '#c2410c', fontSize: '0.98rem' }}>
+                    {perPersonBudget.toLocaleString('vi-VN')} đ
+                  </strong>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 3: CHECKLIST */}
-        {currentTab === 'checklist' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h2 className="section-title"><CheckSquare size={20} color="#f97316" /> Checklist Cần Làm</h2>
-              <div style={{ fontWeight: 700, color: progressPercent === 100 ? '#16a34a' : '#ea580c', fontSize: '0.85rem' }}>
-                {completedCount}/{checklist.length} ({progressPercent}%)
-              </div>
-            </div>
-
-            <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '999px', overflow: 'hidden', marginBottom: '18px' }}>
-              <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: progressPercent === 100 ? '#16a34a' : '#f97316', transition: 'width 0.3s ease' }}></div>
-            </div>
-
-            <div className="card">
-              {checklist.map(item => (
-                <div key={item.id} onClick={() => toggleCheck(item.id)} className="check-row">
-                  <input type="checkbox" checked={item.done} onChange={() => {}} style={{ width: '18px', height: '18px', accentColor: '#f97316', cursor: 'pointer' }} />
-                  <span className="check-text" style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? '#94a3b8' : '#0f172a' }}>
-                    {item.text}
-                  </span>
-                  <span className="check-tag" style={{ background: item.tag === 'Bắt buộc' ? '#fee2e2' : '#f1f5f9', color: item.tag === 'Bắt buộc' ? '#991b1b' : '#475569' }}>
-                    {item.tag}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: MEGA MALLS & FOOD */}
+        {/* TAB 4: MEGA MALLS & REST STOPS */}
         {currentTab === 'malls' && (
           <div>
             <div className="section-header">
-              <h2 className="section-title"><ShoppingBag size={20} color="#f97316" /> Hướng Dẫn Oanh Tạc Mega Malls</h2>
+              <h2 className="section-title">
+                <ShoppingBag size={22} color="#f97316" /> {t.mallsSection.heading}
+              </h2>
+              <p className="section-sub">{t.mallsSection.subHeading}</p>
             </div>
 
             <div className="grid-cards">
-              {mallsInfo.map((mall, idx) => (
-                <div key={idx} className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              {t.mallsSection.malls.map((mall, idx) => (
+                <div
+                  key={idx}
+                  className="card"
+                  style={{
+                    marginBottom: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}
+                >
                   <div>
-                    <span style={{ display: 'inline-block', backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', marginBottom: '8px' }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        backgroundColor: '#e0f2fe',
+                        color: '#0369a1',
+                        fontSize: '0.73rem',
+                        fontWeight: 800,
+                        padding: '3px 9px',
+                        borderRadius: '6px',
+                        marginBottom: '8px'
+                      }}
+                    >
                       {mall.tag}
                     </span>
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '6px', color: '#1e3a8a' }}>{mall.name}</h3>
-                    <p style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '12px', lineHeight: 1.5 }}>{mall.highlight}</p>
+                    <h3
+                      style={{
+                        fontSize: '1.1rem',
+                        fontWeight: 800,
+                        marginBottom: '8px',
+                        color: '#1e3a8a'
+                      }}
+                    >
+                      {mall.name}
+                    </h3>
+
+                    <div
+                      style={{
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        color: '#166534',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        marginBottom: '10px'
+                      }}
+                    >
+                      🚇 <strong>{t.mallsSection.stationLabel}:</strong> {mall.station}
+                    </div>
+
+                    <p
+                      style={{
+                        fontSize: '0.88rem',
+                        color: '#475569',
+                        marginBottom: '10px',
+                        lineHeight: 1.5
+                      }}
+                    >
+                      {mall.highlight}
+                    </p>
+
+                    <div
+                      style={{
+                        background: '#fff7ed',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        color: '#9a3412',
+                        marginBottom: '10px'
+                      }}
+                    >
+                      ☕ <strong>{t.mallsSection.restStopLabel}:</strong> {mall.restStop}
+                    </div>
                   </div>
-                  <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #f97316', fontSize: '0.82rem', color: '#64748b' }}>
-                    <strong>Mẹo:</strong> {mall.tip}
+
+                  <div>
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        borderLeft: '3px solid #f97316',
+                        fontSize: '0.82rem',
+                        color: '#334155',
+                        marginBottom: '12px'
+                      }}
+                    >
+                      💡 <strong>{t.mallsSection.tipLabel}:</strong> {mall.tip}
+                    </div>
+                    <a
+                      href={mall.mapUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="map-link"
+                    >
+                      <MapPin size={13} /> Google Maps <ExternalLink size={11} />
+                    </a>
                   </div>
                 </div>
               ))}
@@ -432,13 +1699,149 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB 5: PERSISTENT CHECKLIST */}
+        {currentTab === 'checklist' && (
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px',
+                marginBottom: '14px'
+              }}
+            >
+              <h2 className="section-title">
+                <CheckSquare size={22} color="#f97316" /> {t.checklistSection.heading}
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span
+                  style={{
+                    fontWeight: 800,
+                    color: progressPercent === 100 ? '#16a34a' : '#ea580c',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {completedCount}/{totalChecklist} ({progressPercent}%)
+                </span>
+                <button
+                  type="button"
+                  onClick={resetChecklist}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '5px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    color: '#475569',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <RotateCcw size={13} /> {t.checklistSection.resetBtn}
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                width: '100%',
+                height: '10px',
+                backgroundColor: '#e2e8f0',
+                borderRadius: '999px',
+                overflow: 'hidden',
+                marginBottom: '18px'
+              }}
+            >
+              <div
+                style={{
+                  width: `${progressPercent}%`,
+                  height: '100%',
+                  backgroundColor: progressPercent === 100 ? '#16a34a' : '#f97316',
+                  transition: 'width 0.3s ease'
+                }}
+              ></div>
+            </div>
+
+            <div className="card">
+              {t.checklistSection.items.map((item) => {
+                const isDone = doneIds.includes(item.id);
+                const isMandatory = item.tag === 'Bắt buộc' || item.tag === 'Mandatory';
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => toggleCheck(item.id)}
+                    className="check-row"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isDone}
+                      onChange={() => {}}
+                      style={{
+                        width: '19px',
+                        height: '19px',
+                        marginTop: '2px',
+                        accentColor: '#f97316',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <span
+                      className="check-text"
+                      style={{
+                        textDecoration: isDone ? 'line-through' : 'none',
+                        color: isDone ? '#94a3b8' : '#0f172a',
+                        fontWeight: isDone ? 400 : 600
+                      }}
+                    >
+                      {item.text}
+                    </span>
+                    <span
+                      className="check-tag"
+                      style={{
+                        background: isMandatory ? '#fee2e2' : '#f1f5f9',
+                        color: isMandatory ? '#991b1b' : '#334155'
+                      }}
+                    >
+                      {item.tag}
+                    </span>
+                  </div>
+                );
+              })}
+
+              <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #e2e8f0' }}>
+                <a
+                  href="https://imigresen-online.imi.gov.my/mdac/main"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="map-link route"
+                >
+                  🌐 {lang === 'vi' ? 'Mở trang khai MDAC Chính thức của Malaysia' : 'Open Official Malaysia MDAC Portal'}{' '}
+                  <ExternalLink size={12} />
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* FOOTER */}
-      <footer style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem', borderTop: '1px solid #e2e8f0', padding: '20px 16px' }}>
-        Kuala Lumpur 5N4Đ Travel Landing Page • Thiết kế chuẩn Mobile Responsive
+      <footer
+        style={{
+          textAlign: 'center',
+          color: '#64748b',
+          fontSize: '0.8rem',
+          borderTop: '1px solid #e2e8f0',
+          background: '#ffffff',
+          padding: '20px 16px',
+          fontWeight: 600
+        }}
+      >
+        {t.footer}
       </footer>
-
     </div>
   );
 }
